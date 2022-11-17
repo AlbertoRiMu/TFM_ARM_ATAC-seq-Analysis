@@ -10,8 +10,10 @@ The rest of the scripts will perform the characterization of the clusters, and a
 
 - ViolinPlot.R
 - Heatmap.R
-- PlotMatrix.R
-- Motifs.R
+- *PlotMatrix.R
+- *Motifs.R
 - GreatAnno..R
 
 The last script being the logisticReg.R will create a prediction model based on the five indices to determine if the region is enhancer or promoter
+
+*Please note that some of the commented code on some of the scripts will need to be run using Linux.
