@@ -1,0 +1,133 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+Libraries used 
+
+```{r}
+library("knitr")
+library("rmdformats")
+library("dplyr")
+library("DT")
+library("tidyr")
+library("ggplot2")
+library("magrittr")
+library ("devtools")
+library("GenomicAlignments")
+
+```
+
+```{r}
+library(Rsubread)
+buildindex("mm9_index/mm9_genome_index", reference = "mm9/mm9.fa", gappedIndex = T)
+
+# Create directories to save results
+system(paste("mkdir", paste0(getwd(), "/bam/")))
+system(paste("mkdir", paste0(getwd(), "/bw/")))
+system(paste("mkdir", paste0(getwd(), "/ChIP_bam/")))
+system(paste("mkdir", paste0(getwd(), "/results/")))
+```
+
+
+
+
+Generating BigWig file
+```{r}
+# Create the file
+
+
+param <- ScanBamParam(mapqFilter = 1, flag = scanBamFlag(isPaired = TRUE, isProperPair = TRUE),
+    what = c("qname", "mapq", "isize"))
+atacReads1<- readGAlignmentPairs("call-bowtie2/shard-0/execution/TGFb2hr1_1.trim.merged.bam", param = param)
+atacReads2<- readGAlignmentPairs("call-bowtie2/shard-1/execution/TGFb2hr2_1.trim.merged.bam", param = param)
+```
+
+
+```{r}
+library(rtracklayer)
+
+# Get fragments coordinates
+atacFragment <- granges(atacReads1)
+head(atacFragment)
+
+# Create file with reads coverage
+atacCov <- coverage(atacFragment)
+# Get total fragments to normalize by RPM 
+totalReads <- length(atacFragment)
+totalReads
+```
+
+Save the file
+```{r}
+# Normalize the file by a 1000000 total reads
+rpm <- lapply(atacCov, function(x) signif(10^6 * x/totalReads, 3))
+rpm <- as(rpm, "SimpleRleList")
+
+# Save the file as Bw
+export.bw(rpm, con = "bw/ATAC_TGFb2hr2.bw")
+```
+
+
+Length of peaks 
+
+```{r}
+# Obtain peaks length
+atacReads_read1 <- GenomicAlignments::first(atacReads1)
+insertSizes <- abs(elementMetadata(atacReads_read1)$isize)
+head(insertSizes)
+```
+
+Distribution of fragments' length
+
+```{r}
+library(magrittr)
+library(dplyr)
+library(ggplot2)
+library(gridExtra)
+
+fragLenPlot <- table(insertSizes) %>%
+    data.frame %>%
+    rename(InsertSize = insertSizes, Count = Freq) %>%
+    mutate(InsertSize = as.numeric(as.vector(InsertSize)), Count = as.numeric(as.vector(Count))) %>%
+    ggplot(aes(x = InsertSize, y = Count)) + geom_line()
+
+plot1 <- fragLenPlot + geom_vline(xintercept = c(147, 240), colour = "red") + geom_vline(xintercept = c(315,
+    437), colour = "darkblue") + geom_vline(xintercept = c(100), colour = "darkgreen") +
+    xlim(0, 1000) + theme_bw()
+
+plot2 <- fragLenPlot + scale_y_continuous(trans = "log2") + geom_vline(xintercept = c(147,
+    240), colour = "red") + geom_vline(xintercept = c(315, 437), colour = "darkblue") +
+    geom_vline(xintercept = c(100), colour = "darkgreen") + xlim(0, 1000) + theme_bw()
+
+grid.arrange(plot1, plot2)
+
+# save results in results folder
+pdf("results/ATAC_fragment_length_distribution.pdf")
+grid.arrange(plot1, plot2)
+invisible(dev.off())
+```
+
+Now we can filter based on fragments' length to get mononucleosome and open regions
+
+```{r}
+# Filter the object of sequencing fragments to get fragments we want
+
+atacReads_Open <- atacReads1[insertSizes < 100, ]
+atacReads_MonoNuc <- atacReads1[insertSizes > 180 & insertSizes < 240, ]
+
+# Build the function to get open and mononucleosome regions
+bWig <- function(fragments, path) {
+    fragmentsGR <- granges(fragments)
+    fragmentsCov <- coverage(fragments)
+    fragmentsTotal <- length(fragments)
+    rpm <- lapply(fragmentsCov, function(x) signif(10^6 * x/fragmentsTotal, 3))
+    rpm <- as(rpm, "SimpleRleList")
+    export.bw(rpm, path)
+}
+
+# Save the results in the bw folder
+bWig(atacReads_Open, "bw/ATAC_TGFb2hr2_open.bw")
+bWig(atacReads_MonoNuc, "bw/ATAC_TGFb2hr2_MonoNuc.bw")
+```
+
