@@ -1,4 +1,4 @@
-# TFM_ARM_ATAC-seq-
+# TFM_ARM_ATAC-seq Analysis
 This project carried out the clustering and characterization of the data of ATAC-seq analysis. Using the ChIP-SIC software to cluster the reads based on their 
 morphological characteristics.
 
